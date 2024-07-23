@@ -1,0 +1,11 @@
+name: civicweb_scraper
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - ipykernel
+  - pip:
+      - beautifulsoup
+      - pandas
+      - joblib
