@@ -3,9 +3,14 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - python=3.10
-  - ipykernel
+  - python=3.10.0
+  - pip
+  - notebook
+  - nbconvert
+  - numpy
+  - pandas
   - pip:
-      - beautifulsoup
-      - pandas
+      - beautifulsoup4
       - joblib
+      - requests
+      # - requests-cache
