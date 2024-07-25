@@ -13,4 +13,4 @@ dependencies:
       - beautifulsoup4
       - joblib
       - requests
-      # - requests-cache
+      - requests-cache
