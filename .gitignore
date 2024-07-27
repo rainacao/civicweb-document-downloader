@@ -1,3 +1,4 @@
 /out
 /cache
 scraper_cache.sqlite
+.env
