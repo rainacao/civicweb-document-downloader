@@ -12,6 +12,7 @@ import traceback
 
 # from joblib import Memory
 import requests_cache
+from requests_cache import CachedSession
 from collections import deque
 import time
 from datetime import datetime
@@ -28,26 +29,42 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 #### FUNCTIONS
-def create_cache(name="scraper_cache", expire_after=3600*24*14, **kwargs):
-    logger.info(f"Creating cache with name {name} which will expire after {expire_after} seconds.")
-    requests_cache.install_cache(name, backend='sqlite', expire_after=expire_after, **kwargs)
+def create_cache(name="civicweb_scraper_cache", expire_after=3600*24*14, allowable_codes=[200], **kwargs):
+    logger.info(f"Getting cache with name {name} which will expire after {expire_after} seconds.")
+    # requests_cache.install_cache(name, backend='sqlite', expire_after=expire_after, **kwargs)
+    return CachedSession(name, backend='sqlite', expire_after=expire_after, allowable_codes=allowable_codes, **kwargs)
 
-def clear_cache(name="scraper_cache"):
-    requests_cache.clear(name)
+def remove_url_from_cache(session:CachedSession, urls:list[str]):
+    logger.info(f"Removing URLs {urls} from cache {session.cache.cache_name}.")
+    session.cache.delete(url=urls)
+
+def clear_cache(session:CachedSession):
+    session.cache.clear()
+
+def fetch_webpage_with_cache(url, session:CachedSession, headers=HEADERS):
+    response = session.get(url, headers=headers)
+    try:
+        response.raise_for_status() # raise exception if response was not successful
+        return response
+    except requests.exceptions.HTTPError as e:
+        raise e
 
 def fetch_webpage(url, headers=HEADERS):
     response = requests.get(url, headers=headers)
-    response.raise_for_status() # raise exception if response was not successful
-    return response
+    try:
+        response.raise_for_status() # raise exception if response was not successful
+        return response
+    except requests.exceptions.HTTPError as e:
+        raise e
 
-def get_items(bs:BeautifulSoup, parent_url:str, parent=[], is_folder=True)->list[dict]:
+def get_items(response, parent_url:str, parent=[], is_folder=True)->list[dict]:
     ''' 
     Return a list of dictionaries containing information for each item in the current folder. Items are either documents or folders.
     
     Parameters
     ----------
-    bs: BeautifulSoup
-        The BeautifulSoup object to parse. Should be the documents site for a website under the civicweb.net domain.
+    response: CachedSessions or Requests
+        The html object to parse. Should be the documents site for a website under the civicweb.net domain.
     parent_url : str
         The url of the current folder. This is the url appended onto the root of the website, and should start with "/".
     parent : list(str)
@@ -65,6 +82,8 @@ def get_items(bs:BeautifulSoup, parent_url:str, parent=[], is_folder=True)->list
         - parent : A list of the folders on the path to the current item.
     '''
     logger.debug("folder parent: %s", parent)
+    
+    bs = BeautifulSoup(response.content,'html.parser')
 
     child_items = []
     if is_folder: 

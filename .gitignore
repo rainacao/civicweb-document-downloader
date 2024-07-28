@@ -2,3 +2,4 @@
 /cache
 scraper_cache.sqlite
 .env
+test_cache.sqlite
