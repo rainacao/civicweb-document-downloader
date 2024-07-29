@@ -26,7 +26,8 @@ HEADERS = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_6) AppleW
 ##### LOGGER SETUP
 logging.basicConfig(format='%(asctime)s - %(levelname)s:%(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+# logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 #### FUNCTIONS
 def create_cache(name="civicweb_scraper_cache", expire_after=3600*24*14, allowable_codes=[200], **kwargs):
@@ -41,21 +42,21 @@ def remove_url_from_cache(session:CachedSession, urls:list[str]):
 def clear_cache(session:CachedSession):
     session.cache.clear()
 
-def fetch_webpage_with_cache(url, session:CachedSession, headers=HEADERS):
-    response = session.get(url, headers=headers)
-    try:
-        response.raise_for_status() # raise exception if response was not successful
-        return response
-    except requests.exceptions.HTTPError as e:
-        raise e
+# def fetch_webpage_with_cache(url, session:CachedSession, headers=HEADERS):
+#     response = session.get(url, headers=headers)
+#     try:
+#         response.raise_for_status() # raise exception if response was not successful
+#         return response
+#     except requests.exceptions.HTTPError as e:
+#         raise e
 
-def fetch_webpage(url, headers=HEADERS):
-    response = requests.get(url, headers=headers)
-    try:
-        response.raise_for_status() # raise exception if response was not successful
-        return response
-    except requests.exceptions.HTTPError as e:
-        raise e
+# def fetch_webpage(url, headers=HEADERS):
+#     response = requests.get(url, headers=headers)
+#     try:
+#         response.raise_for_status() # raise exception if response was not successful
+#         return response
+#     except requests.exceptions.HTTPError as e:
+#         raise e
 
 def get_items(response, parent_url:str, parent=[], is_folder=True)->list[dict]:
     ''' 
@@ -82,7 +83,7 @@ def get_items(response, parent_url:str, parent=[], is_folder=True)->list[dict]:
         - parent : A list of the folders on the path to the current item.
     '''
     logger.debug("folder parent: %s", parent)
-    
+
     bs = BeautifulSoup(response.content,'html.parser')
 
     child_items = []
@@ -122,11 +123,11 @@ def get_filetype(response:requests) -> tuple[str, str]:
 
 def download_file(response:requests, filename:str, out_path=Path.cwd() / "out"):
     ''' 
-    Downloads a PDF file from the given response.
+    Downloads a file from the given response.
     
     Parameters
     ----------
-    response : requests.Response
+    response : requests.Response, cached_requests.CacheSession
         The response object.
     filename : str
         The name of the file being downloaded. Should include the extension.
@@ -139,84 +140,42 @@ def download_file(response:requests, filename:str, out_path=Path.cwd() / "out"):
         f.write(response.content)
         f.close()
 
-##### LOOPS
+def download_document(session, document, root_url, subdomain) -> dict:
+    ''' 
+    Download according to a document information dictionary, and return a dictionary of the download details.
+    '''
+    error = ""
+    file_extension = ""
+    file_type = ""
 
-def find_documents_on_page(folders:deque, done_folders:deque, root_url:str) -> list:
-    # breadth-first search to find all subfolders and documents
-    documents = []
-    while len(folders)>0:
-        time.sleep(1)
-        logger.debug("folders to visit: %s", "\n".join([str(folder) for folder in folders]))
-        logger.debug("completed folders: %s", "\n".join([str(folder) for folder in done_folders]))
-        
-        curr_folder = folders.popleft()
-        logger.info(f"\nSearching folder {curr_folder['name']} at location /{'/'.join(curr_folder['parent'])}...") 
-        try:
-            response = fetch_webpage(url=root_url+curr_folder["url"])
-            bs = BeautifulSoup(response.content,'html.parser')
+    try:
+        response = session.get(url=root_url+document["url"], headers=HEADERS)
 
-            # update current folder
-            curr_path = curr_folder["parent"].copy()
-            curr_path.append(curr_folder["name"])
-            logger.debug("currrent folder's parents:%s", curr_folder["parent"])
-            logger.debug("current folder's name:%s", curr_folder["name"])
-            logger.debug("parent path to add to children folders/documents: %s", curr_path)
-            
-            # add subfolders to visit from this folder to the folders deque
-            # initial_folders = len(folders)
-            children_folders = get_items(bs,parent_url=curr_folder["url"], parent=curr_path, is_folder=True)
-            folders.extend(children_folders)
+        out_path = OUT_FOLDER.joinpath(subdomain, *document["parent"])
 
-            # add documents to download from this folder to the documents list
-            # initial_documents = len(documents)
-            children_documents = get_items(bs,parent_url=curr_folder["url"], parent=curr_path, is_folder=False)
-            documents.extend(children_documents)
-            
-            logger.info(f"Found {len(children_folders)} folders and {len(children_documents)} documents at this location.")
-        except Exception as e:
-            tb_str = ''.join(traceback.format_exception(e))
-            logger.error(tb_str)
-            continue
+        file_extension, file_type = get_filetype(response)
+        logger.debug((f"File: {document['name']}{file_extension}"))
 
-        done_folders.append(curr_folder)
-        curr_path = []
-        
-        logger.info(f"Completed folder {curr_folder['name']}\n")
-    return documents, folders, done_folders
+        download_file(
+        response, 
+        filename=document["name"]+file_extension,
+        out_path=out_path)
+    except Exception as e:
+        logger.error(e)
+        error += f"{e}"
+    finally:
+        download_dict = {
+                    "name": document["name"]+file_extension,
+                    "file_type": file_type,
+                    "subdomain": subdomain,
+                    "parent_path": "/".join(document["parent"]),
+                    "root_url": root_url, 
+                    "url": document["url"], 
+                    "parent_url": document["parent_url"],
+                    "date_scraped": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "error": error
+                }
+        return download_dict
 
-def save_documents(documents, out_folder=OUT_FOLDER):
-    rows = []
-    for document in documents[:10]:
-        error = ""
-        file_extension = ""
-        try:
-            t1 = time.time()
-            response = fetch_webpage(url=root_url+document["url"], headers=HEADERS)
-            t2 = time.time()
-            logger.info((f"Took {round((t2-t1),3)} seconds to get page."))
-            out_path = OUT_FOLDER.joinpath(subdomain, *document["parent"])
-
-            file_extension, file_type = get_filetype(response)
-            logger.info((f"{document['name']}{file_extension}"))
-            download_file(
-                response, 
-                filename=document["name"]+file_extension,
-                out_path=out_path)
-        except Exception as e:
-            tb_str = ''.join(traceback.format_exception(e))
-            logger.error(tb_str)
-            error += str(e) # update with error
-        finally:
-            download_dict = {
-                "name": document["name"]+file_extension,
-                "file_type": file_type,
-                "subdomain": subdomain,
-                "parent_path": "/".join(document["parent"]),
-                "root_url": root_url, 
-                "url": document["url"], 
-                "parent_url": document["parent_url"],
-                "time_scraped": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "'error_in_scraping'": error,
-            }
-            rows.append(download_dict)
-    return rows
+if __name__ == "__main__":
+    pass

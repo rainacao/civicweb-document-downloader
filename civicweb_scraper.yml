@@ -16,3 +16,4 @@ dependencies:
       - requests-cache
       - selenium
       - python-dotenv
+      - tqdm
