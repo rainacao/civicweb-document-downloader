@@ -203,7 +203,7 @@ def scrape_site(session, subdomain):
         with open(TRACKING_FOLDER / f"{subdomain}_documents.csv",'r') as f:
             dict_reader = DictReader(f)
             documents = list(dict_reader)
-        logger.info(f"Found existing document tracking file for {subdomain}: {len(done_folders)} folders completed and {len(folders)} to go")
+        logger.info(f"Found existing document tracking file for {subdomain}, {len(documents)} documents long")
     except FileNotFoundError:
         documents = []
     
@@ -225,7 +225,7 @@ def scrape_site(session, subdomain):
             response.raise_for_status()
             folders.extend(get_items(response, parent_url="/filepro/documents/",parent=[], is_folder=True))
         except requests.exceptions.HTTPError as e:
-            logger.error(f"Unable to fetch document centre information for {root_url+'/filepro/documents/'} - Code {requests.status}: {e}")
+            logger.error(f"Unable to fetch document centre information for {root_url+'/filepro/documents/'} - Code {requests.status_codes}: {e}")
             return 0, False
         except Exception as e:
             logger.error(f"Exception occurred for URL {root_url+'/filepro/documents/'}: {e}")
@@ -307,8 +307,8 @@ if __name__ == "__main__":
                         for subdomain in subdomains_dict.keys() 
                         if "complete" not in subdomains_dict[subdomain] or subdomains_dict[subdomain]["complete"] == False]
     
-    for subdomain in subdomains_to_scrape:
-    # for subdomain in ["dev", "victoria"]:
+    # for subdomain in subdomains_to_scrape:
+    for subdomain in ["victoria", "winchesterva"]:
         # scrape the site
         num_documents, scrape_completness = scrape_site(session, subdomain)
 
